@@ -1,0 +1,49 @@
+name: Build Buinhat Studio IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'BuinhatStudio/**'
+      - 'BuinhatStudio.xcodeproj/**'
+      - '.github/workflows/build-studio.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check source and Xcode
+        run: |
+          xcodebuild -version
+          test -f BuinhatStudio/Web/index.html
+          test -f BuinhatStudio/ContentView.swift
+          test -f BuinhatStudio/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          plutil -lint BuinhatStudio.xcodeproj/project.pbxproj
+      - name: Build iOS app
+        run: |
+          set -o pipefail
+          xcodebuild -project BuinhatStudio.xcodeproj -scheme BuinhatStudio -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+      - name: Package unsigned IPA
+        run: |
+          APP=build/Build/Products/Release-iphoneos/BuinhatStudio.app
+          test -f "$APP/BuinhatStudio"
+          test -f "$APP/Web/index.html"
+          mkdir -p package/Payload
+          cp -R "$APP" package/Payload/
+          (cd package && /usr/bin/zip -qry ../BuinhatStudio-unsigned.ipa Payload)
+          unzip -t BuinhatStudio-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuinhatStudio-unsigned-IPA
+          path: BuinhatStudio-unsigned.ipa
+          if-no-files-found: error
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xcode-build-log
+          path: build.log
+          if-no-files-found: ignore
